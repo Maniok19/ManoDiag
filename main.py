@@ -18,6 +18,9 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import QSplashScreen
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
+QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
 
 from src.resources.assets import get_logo_path
 

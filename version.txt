@@ -1,0 +1,8 @@
+CompanyName=ManoDiag
+FileDescription=ManoDiag – Diagram Editor
+FileVersion=1.0.0.0
+ProductVersion=1.0.0.0
+ProductName=ManoDiag
+InternalName=ManoDiag
+OriginalFilename=ManoDiag.exe
+LegalCopyright=© 2025 ManoDiag

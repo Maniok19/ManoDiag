@@ -57,7 +57,7 @@ Prérequis:
 
 Création exécutable PyInstaller:
 ```bash
-py -3 -m PyInstaller --noconsole --windowed --name ManoDiag --icon app.ico --add-data "logo_ManoDiag.png;." --add-data "exemple.manodiag.json;." main.py
+py -3 -m PyInstaller --clean -y ManoDiag.spec
 ```
 
 ---

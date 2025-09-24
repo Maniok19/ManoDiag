@@ -1,0 +1,107 @@
+{
+  "format": "manodiag",
+  "version": 1,
+  "saved_at": "2025-09-23T15:18:51.864209",
+  "diagram": {
+    "text": "---\nlayout: fixed\n---\n\nflowchart LR\n    A[\"<b>Bienvenue sur ManoDiag</b><br>Créateur de diagrammes professionnels\"]\n    B[\"Éditez le code (panneau de gauche)\"]\n    C[\"Rendu interactif (panneau de droite)\"]\n    D[\"Déplacez / Redimensionnez les nœuds\"]\n    E[\"Stylisez avec classdef\"]\n    F[\"Export PNG\"]\n    G[\"Sauvegarde / Chargement\"]\n    H[\"Zoom / Ajuster la vue\"]\n    I[\"Arêtes avec label\"]\n    J[\"Arêtes bidirectionnelles\"]\n    K[\"Cibles multiples\"]\n    L[\"Bascule Bézier (clic droit sur l’arête)\"]\n    M[\"<b>Bienvenue & bon usage !</b>\"]\n\nA --> B\nA --> C\nB -- saisie --> C\nC --> D\nD --> E\nE --> F\nE --> G\nA --> H & I & J\nI -- exemple --> F\nB <--> J\nC --> L\nL -- clic droit --> J\nA -- bienvenue --> M\n\nclassDef primary fill:#e3f2fd,stroke:#1565c0,stroke-width:2px\nclassDef success fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px\nclassDef info fill:#eef7ff,stroke:#0d47a1,stroke-width:2px\nclassDef warning fill:#fff8e1,stroke:#f57f17,stroke-width:2px\nclassDef accent fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px\nclassDef emphasis fill:#fff0f2,stroke:#c2185b,stroke-width:2px\n\nA:::primary\nD:::info\nE:::accent\nF:::success\nG:::primary\nH:::info\nI:::warning\nJ:::warning\nK:::accent\nL:::accent\nM:::success\n"
+  },
+  "nodes": {
+    "B": {
+      "x": 81.77197751202718,
+      "y": -235.0755146563245,
+      "width": 247.09181766704415,
+      "height": 60.0
+    },
+    "C": {
+      "x": 453.7895377972821,
+      "y": -148.05609003397518,
+      "width": 261.6071206115519,
+      "height": 60.0
+    },
+    "D": {
+      "x": 111.38996671349105,
+      "y": -33.60379444159789,
+      "width": 268.86477208380524,
+      "height": 60.0
+    },
+    "E": {
+      "x": 509.27054848511716,
+      "y": -20.988131687762674,
+      "width": 160.0,
+      "height": 60.0
+    },
+    "F": {
+      "x": 765.077426033409,
+      "y": -72.52936544450739,
+      "width": 160.0,
+      "height": 60.0
+    },
+    "G": {
+      "x": 776.561062894949,
+      "y": 65.87458991742218,
+      "width": 160.0,
+      "height": 60.0
+    },
+    "H": {
+      "x": 515.4795753114382,
+      "y": -544.8008748584372,
+      "width": 160.0,
+      "height": 60.0
+    },
+    "I": {
+      "x": 780.8802172989807,
+      "y": -302.55659682899216,
+      "width": 160.0,
+      "height": 60.0
+    },
+    "J": {
+      "x": 58.17790029261667,
+      "y": -480.6585283202661,
+      "width": 160.0,
+      "height": 60.0
+    },
+    "K": {
+      "x": 272.2550906002265,
+      "y": -558.3416619479049,
+      "width": 160.0,
+      "height": 60.0
+    },
+    "L": {
+      "x": -94.78475348504331,
+      "y": -142.12329175799573,
+      "width": 252.89793884484712,
+      "height": 51.29081823329554
+    },
+    "M": {
+      "x": 726.528471828992,
+      "y": -461.57297565118927,
+      "width": 196.71742593601425,
+      "height": 60.0
+    },
+    "A": {
+      "x": 348.0636497019966,
+      "y": -321.12511193204926,
+      "width": 308.177050891846,
+      "height": 60.0
+    }
+  },
+  "edges": {
+    "C|L||arrow": {
+      "use_bezier": false,
+      "control1": [
+        627.2351427179275,
+        -74.3525312992849
+      ],
+      "control2": [
+        540.0855021009095,
+        124.51224078452033
+      ]
+    }
+  },
+  "settings": {
+    "show_grid": true,
+    "antialiasing": true,
+    "node_color": "#dcddff",
+    "border_color": "#6464c8"
+  }
+}

@@ -14,13 +14,15 @@ import traceback
 # Ajoute la racine du projet au PYTHONPATH (exécution locale)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtWidgets import QSplashScreen
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
-QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+
+# Actifs uniquement si présents (Qt5) ; ignorés sous Qt6
+if hasattr(Qt.ApplicationAttribute, "AA_EnableHighDpiScaling"):
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+if hasattr(Qt.ApplicationAttribute, "AA_UseHighDpiPixmaps"):
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
 
 from src.resources.assets import get_logo_path
 
@@ -42,7 +44,6 @@ def main():
         app.setApplicationName("ManoDiag")
         app.setOrganizationName("ManoDiag")
 
-        # Icône d’application + Splash
         splash = None
         logo_path = get_logo_path()
         if logo_path:
@@ -50,7 +51,6 @@ def main():
             try:
                 pix = QPixmap(logo_path)
                 if not pix.isNull():
-                    # Splash propre et net (redimensionné)
                     sp = pix.scaledToWidth(256, Qt.TransformationMode.SmoothTransformation)
                     splash = QSplashScreen(sp)
                     splash.show()
@@ -58,9 +58,7 @@ def main():
             except Exception:
                 splash = None
 
-        # Import tardif pour accélérer le démarrage et isoler les erreurs d'UI
         from src.ui.main_window import MainWindow
-
         window = MainWindow()
         window.show()
 

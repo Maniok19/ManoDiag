@@ -1,5 +1,8 @@
 """
-Parseur amélioré pour la syntaxe Mermaid
+DiagramParser : Analyseur avancé pour la syntaxe Mermaid (flowchart et séquence).
+- Prend en charge la configuration YAML en tête de fichier.
+- Gère les nœuds, arêtes, classes, et diagrammes de séquence.
+- Retourne une structure de données prête pour le rendu graphique.
 """
 
 import re
@@ -9,6 +12,14 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Node:
+    """
+    Représente un nœud du diagramme.
+    - id : identifiant unique
+    - label : texte affiché
+    - node_type : type graphique (ex: 'rect')
+    - properties : propriétés additionnelles
+    - css_class : classe CSS optionnelle
+    """
     id: str
     label: str
     node_type: str
@@ -17,6 +28,14 @@ class Node:
 
 @dataclass
 class Edge:
+    """
+    Représente une arête entre deux nœuds.
+    - source : id du nœud source
+    - target : id du nœud cible
+    - label : texte de l’arête
+    - edge_type : type ('arrow', 'bidirectional')
+    - style : style graphique ('solid', ...)
+    """
     source: str
     target: str
     label: str = ""
@@ -25,11 +44,23 @@ class Edge:
 
 @dataclass
 class SequenceParticipant:
+    """
+    Participant d’un diagramme de séquence.
+    - id : identifiant
+    - label : affichage
+    """
     id: str
     label: str
 
 @dataclass
 class SequenceMessage:
+    """
+    Message échangé dans une séquence.
+    - source : participant émetteur
+    - target : participant destinataire
+    - text : contenu du message
+    - style : type de flèche ('solid', 'dashed', 'async')
+    """
     source: str
     target: str
     text: str
@@ -37,27 +68,33 @@ class SequenceMessage:
 
 @dataclass
 class SequenceNote:
+    """
+    Note associée à un ou plusieurs participants.
+    - participants : liste d’identifiants
+    - text : contenu de la note
+    """
     participants: list[str]
     text: str
 
 class DiagramParser:
+    """
+    Analyseur principal pour les diagrammes Mermaid-like.
+    - Détecte et extrait la configuration YAML.
+    - Identifie le type de diagramme (flowchart ou séquence).
+    - Parse les nœuds, arêtes, classes, participants, messages et notes.
+    - Retourne une structure dict prête à être exploitée par le renderer.
+    """
     def __init__(self):
-        # Patterns améliorés
+        # Expressions régulières pour la détection des éléments Mermaid
         self.patterns = {
             'config_block': re.compile(r'---\s*\n(.*?)\n---', re.DOTALL),
             'flowchart_direction': re.compile(r'flowchart\s+(TD|TB|BT|RL|LR)'),
-            
-            # Nœuds avec différents formats
             'node_with_quotes': re.compile(r'(\w+)\["([^"]+)"\]'),
             'node_with_brackets': re.compile(r'(\w+)\[([^\]]+)\]'),
-            
-            # Arêtes
             'edge_bidirectional': re.compile(r'(\w+)\s*<-->\s*(\w+)'),
             'edge_with_label': re.compile(r'(\w+)\s*--\s*([^-]+)\s*-->\s*(\w+)'),
             'edge_simple': re.compile(r'(\w+)\s*-->\s*(\w+)'),
             'edge_multiple': re.compile(r'(\w+)\s*-->\s*([^&\n]+(?:\s*&\s*[^&\n]+)+)'),
-            
-            # Classes
             'class_def': re.compile(r'classDef\s+(\w+)\s+(.+)'),
             'class_assign': re.compile(r'(\w+):::(\w+)'),
         }
@@ -69,25 +106,27 @@ class DiagramParser:
         }
     
     def parse(self, text: str) -> Dict[str, Any]:
-        """Parse le texte et retourne la structure du diagramme"""
-        # Extraire la config YAML
+        """
+        Point d’entrée principal.
+        - Extrait la configuration YAML.
+        - Détermine le type de diagramme.
+        - Retourne la structure du diagramme.
+        """
         config, diagram_text = self.extract_config(text)
-        
-        # Nettoyer le texte
         lines = [line.strip() for line in diagram_text.split('\n') 
                 if line.strip() and not line.strip().startswith('#')]
-        
-        # Détection sequence
         stripped = [l for l in diagram_text.splitlines() if l.strip()]
         if stripped and stripped[0].strip().lower().startswith("sequence"):
             return self.parse_sequence(stripped[1:], config)
         return self.parse_flowchart(lines, config)
     
     def extract_config(self, text: str) -> tuple:
-        """Extrait la configuration YAML"""
+        """
+        Extrait le bloc YAML de configuration en tête de fichier.
+        Retourne (config: dict, diagram_text: str).
+        """
         config = {}
         diagram_text = text
-        
         config_match = self.patterns['config_block'].search(text)
         if config_match:
             try:
@@ -95,109 +134,91 @@ class DiagramParser:
                 diagram_text = text[config_match.end():]
             except yaml.YAMLError as e:
                 print(f"Erreur YAML: {e}")
-        
         return config, diagram_text
     
     def parse_flowchart(self, lines: List[str], config: Dict) -> Dict[str, Any]:
-        """Parse un diagramme flowchart"""
+        """
+        Analyse un diagramme de type flowchart.
+        - Détecte direction, nœuds, arêtes, classes.
+        - Retourne la structure complète.
+        """
         nodes = {}
         edges = []
         class_defs = {}
         node_classes = {}
         direction = 'TD'
         
-        # Première passe: extraire les définitions
+        # Première passe : extraction des définitions de classes et direction
         for line in lines:
-            # Direction
             dir_match = self.patterns['flowchart_direction'].search(line)
             if dir_match:
                 direction = dir_match.group(1)
                 continue
-            
-            # Définitions de classes
             class_def_match = self.patterns['class_def'].search(line)
             if class_def_match:
                 class_name, properties = class_def_match.groups()
                 class_defs[class_name] = self.parse_css_properties(properties)
                 continue
-            
-            # Assignations de classes
             class_assign_match = self.patterns['class_assign'].search(line)
             if class_assign_match:
                 node_id, class_name = class_assign_match.groups()
                 node_classes[node_id] = class_name
                 continue
         
-        # Deuxième passe: nœuds et arêtes
+        # Deuxième passe : extraction des nœuds et arêtes
         for line in lines:
             if any(pattern in line for pattern in ['classDef', ':::', 'flowchart']):
                 continue
-            
-            # Arêtes avec cibles multiples
             multi_match = self.patterns['edge_multiple'].search(line)
             if multi_match:
                 source = multi_match.group(1).strip()
                 targets_str = multi_match.group(2)
                 targets = [t.strip().strip('"[]') for t in targets_str.split('&')]
-                
                 for target in targets:
                     if target:
                         edges.append(Edge(source, target))
-                        # Créer les nœuds si nécessaire
                         if source not in nodes:
                             nodes[source] = Node(source, source, 'rect')
                         if target not in nodes:
                             nodes[target] = Node(target, target, 'rect')
                 continue
-            
-            # Arêtes bidirectionnelles
             bi_match = self.patterns['edge_bidirectional'].search(line)
             if bi_match:
                 source, target = bi_match.groups()
                 edges.append(Edge(source.strip(), target.strip(), edge_type="bidirectional"))
                 continue
-            
-            # Arêtes avec label
             label_match = self.patterns['edge_with_label'].search(line)
             if label_match:
                 source, label, target = label_match.groups()
                 edges.append(Edge(source.strip(), target.strip(), label.strip()))
                 continue
-            
-            # Arêtes simples
             simple_match = self.patterns['edge_simple'].search(line)
             if simple_match:
                 source, target = simple_match.groups()
                 edges.append(Edge(source.strip(), target.strip()))
                 continue
-            
-            # Nœuds avec guillemets
             quote_match = self.patterns['node_with_quotes'].search(line)
             if quote_match:
                 node_id, label = quote_match.groups()
                 nodes[node_id] = Node(node_id, label, 'rect')
                 continue
-            
-            # Nœuds avec crochets
             bracket_match = self.patterns['node_with_brackets'].search(line)
             if bracket_match:
                 node_id, label = bracket_match.groups()
-                # Nettoyer le label
                 label = label.strip('"')
                 nodes[node_id] = Node(node_id, label, 'rect')
                 continue
         
-        # Créer les nœuds manquants référencés dans les arêtes
+        # Création des nœuds manquants référencés dans les arêtes
         all_node_ids = set()
         for edge in edges:
             all_node_ids.add(edge.source)
             all_node_ids.add(edge.target)
-        
         for node_id in all_node_ids:
             if node_id not in nodes:
                 nodes[node_id] = Node(node_id, node_id, 'rect')
         
-        # Assigner les classes
+        # Assignation des classes CSS aux nœuds
         for node_id, class_name in node_classes.items():
             if node_id in nodes:
                 nodes[node_id].css_class = class_name
@@ -212,6 +233,11 @@ class DiagramParser:
         }
     
     def parse_sequence(self, lines: List[str], config: Dict) -> Dict[str, Any]:
+        """
+        Analyse un diagramme de séquence.
+        - Détecte participants, messages, notes, titre.
+        - Retourne la structure complète.
+        """
         participants: dict[str, SequenceParticipant] = {}
         order: list[str] = []
         messages: list[SequenceMessage] = []
@@ -258,7 +284,7 @@ class DiagramParser:
                     style = 'async'
                 messages.append(SequenceMessage(src, tgt, text.strip(), style))
                 continue
-            # fallback: ignorer
+            # Ligne ignorée si non reconnue
 
         return {
             'type': 'sequence',
@@ -270,14 +296,14 @@ class DiagramParser:
         }
     
     def parse_css_properties(self, properties_str: str) -> Dict[str, str]:
-        """Parse les propriétés CSS"""
+        """
+        Analyse les propriétés CSS d’une définition de classe.
+        Retourne un dictionnaire clé/valeur.
+        """
         properties = {}
-        
-        # Diviser par les virgules puis par les deux-points
         for prop in properties_str.split(','):
             prop = prop.strip()
             if ':' in prop:
                 key, value = prop.split(':', 1)
                 properties[key.strip()] = value.strip()
-        
         return properties

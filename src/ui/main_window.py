@@ -7,16 +7,12 @@ MainWindow - Fenêtre principale de ManoDiag
 """
 
 from __future__ import annotations
-from typing import Dict
 import os
 import json
 import math
 import logging
 import traceback
-import os
-import json
 from typing import Dict
-
 from PyQt6.QtCore import Qt, QTimer, QRectF, QMarginsF
 from PyQt6.QtGui import QAction, QPainter, QColor, QKeySequence, QImage, QIcon
 from PyQt6.QtWidgets import (
@@ -31,51 +27,31 @@ from src.ui.grid_graphics_view import GridGraphicsView
 from src.resources.help import HELP_HTML
 from src.resources.assets import get_logo_path
 
+from .mixins import (
+    UISetupMixin,
+    MenuMixin,
+    DialogsMixin,
+    PersistenceMixin,
+    ExampleMixin
+)
+
 log = logging.getLogger(__name__)
 
-class MainWindow(QMainWindow):
+class MainWindow(QMainWindow, UISetupMixin, MenuMixin, DialogsMixin, PersistenceMixin, ExampleMixin):
     """Fenêtre principale de l'application ManoDiag."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.current_settings: Dict[str, object] = {}
-        self._initial_fit_done = False  # <- ajouté
-
-        self.setWindowTitle("ManoDiag Professional - Créateur de Diagrammes")
-        self.setGeometry(100, 100, 1600, 1000)
-
-        # Icône de fenêtre
         try:
-            logo_path = get_logo_path()
-            if logo_path:
-                self.setWindowIcon(QIcon(logo_path))
-            self._app_logo_path = logo_path  # pour About/Help
-        except Exception:
-            self._app_logo_path = ""
-
-        # Thème simple
-        self.setStyleSheet("""
-            QMainWindow { background-color: #f8f9fa; }
-            QMenuBar { background-color: #2c3e50; color: white; padding: 5px; }
-            QMenuBar::item { padding: 8px 12px; }
-            QMenuBar::item:selected { background-color: #34495e; }
-            QStatusBar { background-color: #2c3e50; color: white; padding: 5px; }
-            QGraphicsView {
-                border: 2px solid #bdc3c7;
-                border-radius: 5px;
-                background-color: white;
-            }
-        """)
-
-        try:
+            self._setup_base_window()
             self._setup_ui()
-            self._setup_menu_bar()
             self._setup_status_bar()
+            self._setup_menu_bar()
             self._setup_engine()
             self._load_example()
             log.info("MainWindow initialisée.")
         except Exception as e:
-            log.exception("Erreur lors de l'initialisation: %s", e)
+            log.exception("Erreur d'initialisation: %s", e)
 
     # ---------- Initialisation UI ----------
     def _normalize_layout(self) -> None:
@@ -93,6 +69,22 @@ class MainWindow(QMainWindow):
             import traceback, logging
             logging.getLogger(__name__).exception("Erreur de normalisation: %s", e)
             self.status_bar.showMessage(f"Erreur de normalisation: {str(e)}")
+
+    def _setup_engine(self) -> None:
+        self.diagram_engine = DiagramEngine()
+        try:
+            self.diagram_engine.renderer.signal_emitter.position_changed.connect(
+                self._on_node_position_signal
+            )
+        except Exception as e:
+            log.warning("Connexion signal impossible: %s", e)
+        self.current_settings = {
+            "show_grid": True,
+            "antialiasing": True,
+            "node_color": QColor(220, 221, 255),
+            "border_color": QColor(100, 100, 200),
+        }
+        self._apply_settings(self.current_settings)
 
     def _setup_ui(self) -> None:
         """Construit l'éditeur + la scène de rendu avec un splitter."""
@@ -136,133 +128,6 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar(self)
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Prêt")
-
-    def _setup_engine(self) -> None:
-        """Instancie le moteur (parser + renderer) et initialise les réglages."""
-        self.diagram_engine = DiagramEngine()
-        log.info("Moteur de diagramme initialisé.")
-
-        # IMPORTANT: écoute des déplacements de nœuds pour forcer layout: fixed dans l’éditeur
-        try:
-            self.diagram_engine.renderer.signal_emitter.position_changed.connect(
-                self._on_node_position_signal
-            )
-        except Exception as e:
-            log.warning("Impossible de connecter le signal de position: %s", e)
-
-        # Réglages par défaut
-        self.current_settings = {
-            "show_grid": True,
-            "antialiasing": True,
-            "node_color": QColor(220, 221, 255),
-            "border_color": QColor(100, 100, 200),
-        }
-        self._apply_settings(self.current_settings)
-
-    def _setup_menu_bar(self) -> None:
-        """Construit la barre de menus (Fichier, Vue, Help)."""
-        menubar = self.menuBar()
-
-        # Fichier
-        file_menu = menubar.addMenu("Fichier")
-
-        new_action = QAction("Nouveau", self)
-        new_action.setShortcut(QKeySequence.StandardKey.New)
-        new_action.triggered.connect(self._new_diagram)
-        file_menu.addAction(new_action)
-
-        open_action = QAction("Ouvrir…", self)
-        open_action.setShortcut(QKeySequence.StandardKey.Open)
-        open_action.triggered.connect(self._open_diagram)
-        file_menu.addAction(open_action)
-
-        save_action = QAction("Sauvegarder…", self)
-        save_action.setShortcut(QKeySequence.StandardKey.Save)
-        save_action.triggered.connect(self._save_diagram)
-        file_menu.addAction(save_action)
-
-        export_action = QAction("Exporter en PNG", self)
-        export_action.triggered.connect(self._export_png)
-        file_menu.addAction(export_action)
-
-        # Vue
-        view_menu = menubar.addMenu("Vue")
-
-        zoom_in_action = QAction("Zoom +", self)
-        zoom_in_action.setShortcut(QKeySequence.StandardKey.ZoomIn)
-        zoom_in_action.triggered.connect(self._zoom_in)
-        view_menu.addAction(zoom_in_action)
-
-        zoom_out_action = QAction("Zoom -", self)
-        zoom_out_action.setShortcut(QKeySequence.StandardKey.ZoomOut)
-        zoom_out_action.triggered.connect(self._zoom_out)
-        view_menu.addAction(zoom_out_action)
-
-        fit_action = QAction("Ajuster à la fenêtre", self)
-        fit_action.triggered.connect(self._fit_in_view)
-        view_menu.addAction(fit_action)
-
-        view_menu.addSeparator()
-
-        self.action_show_grid = QAction("Afficher la grille", self, checkable=True)
-        self.action_show_grid.setChecked(True)
-        self.action_show_grid.toggled.connect(self._update_settings_from_menu)
-        view_menu.addAction(self.action_show_grid)
-
-        self.action_antialiasing = QAction("Anticrénelage", self, checkable=True)
-        self.action_antialiasing.setChecked(True)
-        self.action_antialiasing.toggled.connect(self._update_settings_from_menu)
-        view_menu.addAction(self.action_antialiasing)
-
-        view_menu.addSeparator()
-
-        self.action_node_color = QAction("Couleur des nœuds…", self)
-        self.action_node_color.triggered.connect(self._choose_node_color)
-        view_menu.addAction(self.action_node_color)
-
-        self.action_border_color = QAction("Couleur de la bordure…", self)
-        self.action_border_color.triggered.connect(self._choose_border_color)
-        view_menu.addAction(self.action_border_color)
-
-        view_menu.addSeparator()
-
-        reset_view_action = QAction("Réinitialiser la vue", self)
-        reset_view_action.triggered.connect(self._reset_view)
-        view_menu.addAction(reset_view_action)
-
-        reset_pos_action = QAction("Réinitialiser les positions", self)
-        reset_pos_action.triggered.connect(self._confirm_reset_positions)
-        view_menu.addAction(reset_pos_action)
-
-        # Éditer
-        edit_menu = menubar.addMenu("Éditer")
-
-        normalize_action = QAction("Normaliser", self)
-        normalize_action.setToolTip("Ajuster la taille des nœuds au texte et aligner les positions sur la grille")
-        normalize_action.triggered.connect(self._normalize_layout)
-        edit_menu.addAction(normalize_action)
-
-        # Nouveaux exemples
-        edit_menu.addSeparator()
-        load_flow_example_action = QAction("Charger l'exemple de flowchart", self)
-        load_flow_example_action.triggered.connect(self._load_flowchart_example)
-        edit_menu.addAction(load_flow_example_action)
-
-        load_seq_example_action = QAction("Charger l'exemple de sequence", self)
-        load_seq_example_action.triggered.connect(self._load_sequence_example)
-        edit_menu.addAction(load_seq_example_action)
-
-        # Help
-        help_menu = menubar.addMenu("Help")
-
-        help_action = QAction("User Guide…", self)
-        help_action.setShortcut("F1")
-        help_action.triggered.connect(self._show_help_dialog)
-        help_menu.addAction(help_action)
-
-        about_action = QAction("About ManoDiag", self)
-        about_action.triggered.connect(self._show_about_dialog)
-        help_menu.addAction(about_action)
 
     # ---------- Slots / Actions ----------
 

@@ -1,5 +1,8 @@
 """
-Moteur de rendu pour les diagrammes avec interaction
+Moteur de rendu graphique pour diagrammes interactifs (flowchart et séquence).
+- Gère l'affichage, la mise à jour et l'interaction des éléments du diagramme.
+- Prend en charge la persistance des positions et des styles.
+- Optimise le recyclage des items pour un rendu fluide et incrémental.
 """
 
 from PyQt6.QtWidgets import QGraphicsScene
@@ -15,15 +18,20 @@ from ..core.position_manager import PositionManager
 from ..graphics.sequence_items import SequenceParticipantItem, SequenceMessageItem, SequenceNoteItem
 
 class DiagramRenderer(QObject):
-    """Renderer avec support des signaux"""
+    """
+    Moteur de rendu principal pour les diagrammes.
+    - Supporte les signaux pour interaction et mise à jour.
+    - Gère les paramètres de style et de layout.
+    - Optimise la réutilisation des items graphiques.
+    """
     
     def __init__(self):
         super().__init__()
-        # Paramètres essentiels par défaut
+        # Paramètres de style par défaut
         self.node_color = QColor(220, 221, 255)
         self.border_color = QColor(100, 100, 200)
         
-        # Paramètres fixes pour la mise en page
+        # Paramètres de layout
         self.node_width = 160
         self.node_height = 60
         self.node_spacing_x = 220
@@ -31,29 +39,28 @@ class DiagramRenderer(QObject):
         self.layout_type = 'auto'
         self.direction = 'TD'
         
-        # Émetteur de signaux centralisé
+        # Gestion des signaux pour les nœuds interactifs
         self.signal_emitter = NodeSignalEmitter()
         self.signal_emitter.position_changed.connect(self.on_node_position_changed)
         
-        # Cache des nœuds existants pour éviter les réinitialisations
+        # Caches pour les items graphiques existants
         self.existing_nodes = {}
         self.existing_edges = []
-        self.all_control_points = []  # Suivi de tous les points de contrôle
-        # NEW: mémoriser les définitions de classes pour réapplication
+        self.all_control_points = []
         self.last_class_defs = {}
         self._current_mode = 'flowchart'
         self.sequence_participants_items = {}
         self.sequence_message_items = []
         self.sequence_note_items = []
-        # Nouveaux index pour réutilisation
         self._seq_messages_by_key = {}
         self._seq_notes_by_key = {}
         self._sequence_title_item = None
-        # NEW: signature du dernier diagramme de séquence (tuple d'IDs)
         self._last_sequence_sig: tuple[str, ...] = ()
     
     def clear_scene_completely(self, scene: QGraphicsScene):
-        """Nettoie complètement la scène"""
+        """
+        Nettoie intégralement la scène graphique et réinitialise les caches.
+        """
         try:
             scene.clear()
             self.existing_nodes = {}
@@ -67,15 +74,16 @@ class DiagramRenderer(QObject):
             print(f"[Renderer] clear_scene_completely error: {e}")
     
     def update_settings(self, settings: Dict[str, Any]):
-        """Met à jour les paramètres de rendu (simplifié)"""
+        """
+        Met à jour les paramètres de style du rendu.
+        - Applique les nouveaux styles aux nœuds existants.
+        - Nettoie les références obsolètes.
+        """
         self.node_color = settings.get('node_color', QColor(220, 221, 255))
         self.border_color = settings.get('border_color', QColor(100, 100, 200))
-        # Réappliquer styles aux nœuds existants (classDef préservées)
-        # SÉCURISATION: retirer les références vers des items déjà détruits
         for nid, node in list(self.existing_nodes.items()):
             try:
                 if node.scene() is None:
-                    # Objet Qt déjà supprimé: nettoyer la référence
                     self.existing_nodes.pop(nid, None)
                     continue
                 base = {'fill': self.node_color.name(), 'stroke': self.border_color.name()}
@@ -84,17 +92,20 @@ class DiagramRenderer(QObject):
                 if hasattr(node, 'update_style'):
                     node.update_style(styled)
             except RuntimeError:
-                # Objet déjà détruit (sécurité supplémentaire)
                 self.existing_nodes.pop(nid, None)
             except Exception:
                 pass
         
     def render_sequence(self, data: Dict[str, Any], scene: QGraphicsScene):
-        # Calcul signature courante des participants demandés
+        """
+        Rendu incrémental d'un diagramme de séquence.
+        - Gère participants, messages, notes et titre.
+        - Optimise la réutilisation des items pour éviter les scintillements.
+        - Persiste les positions des participants.
+        """
         participants = data.get('participants', [])
         new_sig = tuple(p.id for p in participants)
 
-        # Reset si on change de mode OU si signature différente d’un précédent diagramme sequence
         if self._current_mode != 'sequence' or (self._current_mode == 'sequence' and self._last_sequence_sig and self._last_sequence_sig != new_sig):
             try:
                 scene.clear()
@@ -121,7 +132,7 @@ class DiagramRenderer(QObject):
         lifeline_h = 1000
         pm = PositionManager()
 
-        # --- Participants ---
+        # Participants : création et mise à jour
         wanted_ids = [p.id for p in participants]
         for pid in list(self.sequence_participants_items.keys()):
             if pid not in wanted_ids:
@@ -137,14 +148,11 @@ class DiagramRenderer(QObject):
             w = int(saved.get('width', 140))
             if p.id in self.sequence_participants_items:
                 item = self.sequence_participants_items[p.id]
-                # Repositionnement si nécessaire (CORRECTION)
                 if abs(item.pos().x() - x) > 0.1:
                     item.setPos(float(x), 0.0)
-                # Label éventuellement mis à jour
                 if item.label != p.label:
                     item.label = p.label
                     item.text_item.setHtml(f"<div style='text-align:center;padding:4px'>{p.label}</div>")
-                # Largeur possible (évolution future)
                 if w != item.width:
                     item.width = w
                     item.setRect(0, 0, w, header_h)
@@ -160,7 +168,7 @@ class DiagramRenderer(QObject):
                 scene.addItem(item)
                 self.sequence_participants_items[p.id] = item
 
-        # --- Messages ---
+        # Messages : création, mise à jour et suppression
         used_message_keys = set()
         base_y = 120
         step_y = 70
@@ -195,7 +203,7 @@ class DiagramRenderer(QObject):
                     pass
                 self._seq_messages_by_key.pop(k, None)
 
-        # --- Notes ---
+        # Notes : création, mise à jour et suppression
         used_note_keys = set()
         if notes:
             y_notes_start = base_y + len(messages) * step_y + 50
@@ -228,7 +236,7 @@ class DiagramRenderer(QObject):
                     pass
                 self._seq_notes_by_key.pop(k, None)
 
-        # --- Titre ---
+        # Titre du diagramme : création, mise à jour ou suppression
         if title:
             if not self._sequence_title_item:
                 from PyQt6.QtWidgets import QGraphicsTextItem
@@ -250,7 +258,7 @@ class DiagramRenderer(QObject):
                     pass
                 self._sequence_title_item = None
 
-        # --- PERSISTENCE MASSIVE DES POSITIONS PARTICIPANTS ---
+        # Persistance des positions des participants
         try:
             for pid, it in self.sequence_participants_items.items():
                 pm.custom_positions[pid] = {
@@ -266,21 +274,19 @@ class DiagramRenderer(QObject):
         scene._sequence_message_items = list(self._seq_messages_by_key.values())
         scene._sequence_note_items = list(self._seq_notes_by_key.values())
 
-        # Mettre à jour la signature courante (après succès)
         self._last_sequence_sig = new_sig
     
-    # --- RESTORED: callback de mise à jour des positions de nœuds ---
     def on_node_position_changed(self, node_id: str, x: float, y: float, w: float, h: float):
         """
-        Appelé quand un InteractiveNode émet un changement de position/taille.
-        Persisté via PositionManager + mise à jour paresseuse des arêtes.
+        Callback appelé lors du déplacement ou redimensionnement d'un nœud interactif.
+        - Met à jour la position dans PositionManager.
+        - Met à jour les arêtes connectées.
         """
         try:
             pm = PositionManager()
             pm.update_node_position(node_id, x, y, w, h)
         except Exception as e:
             print(f"[Renderer] on_node_position_changed error: {e}")
-        # Mise à jour des arêtes reliées (si présentes)
         try:
             node = self.existing_nodes.get(node_id)
             if node:
@@ -292,20 +298,18 @@ class DiagramRenderer(QObject):
         except Exception:
             pass
 
-    # ---------- NOUVEAU : rendu flowchart ----------
     def render_flowchart(self, data: Dict[str, Any], scene: QGraphicsScene):
         """
-        Rendu incrémental d’un diagramme de type flowchart:
-        - Réutilise les nœuds/arrêtes existants quand possible
-        - Respecte les positions sauvegardées si layout: fixed + PositionManager
-        - Applique classDef sur les nœuds (mémorisées pour mises à jour de thème)
+        Rendu incrémental d’un diagramme de type flowchart.
+        - Réutilise les nœuds et arêtes existants.
+        - Respecte les positions sauvegardées si layout: fixed.
+        - Applique les styles classDef.
         """
         from ..graphics.interactive_node import InteractiveNode
         from ..graphics.interactive_edge import InteractiveEdge
         from ..core.position_manager import PositionManager
 
         if self._current_mode != 'flowchart':
-            # Changement de mode: on nettoie complètement (plus simple)
             self.clear_scene_completely(scene)
             self._current_mode = 'flowchart'
 
@@ -316,20 +320,16 @@ class DiagramRenderer(QObject):
         edges_spec = data.get('edges', []) or []
         direction = data.get('direction', 'TD')
         self.direction = direction
-        self.last_class_defs = class_defs  # mémoriser pour update_settings()
+        self.last_class_defs = class_defs
 
-        # Déterminer si on peut faire un layout auto
         layout_fixed = str(config.get('layout', '')).lower() == 'fixed'
         auto_layout = not layout_fixed
 
-        # --- Gestion des nœuds ---
+        # Gestion des nœuds : création, mise à jour, suppression
         wanted_ids = [n.id for n in nodes_spec]
-
-        # Supprimer nœuds obsolètes
         for nid in list(self.existing_nodes.keys()):
             if nid not in wanted_ids:
                 try:
-                    # Retirer les arêtes associées
                     node = self.existing_nodes[nid]
                     for edge in list(getattr(node, 'connected_edges', [])):
                         try:
@@ -344,22 +344,20 @@ class DiagramRenderer(QObject):
                     pass
                 self.existing_nodes.pop(nid, None)
 
-        # Calcul de positions auto (simple grille / direction)
         base_x = 0
         base_y = 0
         col = 0
         row = 0
-        max_per_row = 4  # simple heuristique
+        max_per_row = 4
         spacing_x = self.node_spacing_x
         spacing_y = self.node_spacing_y
 
         def next_auto_pos(index: int) -> Tuple[float, float]:
             nonlocal col, row
-            # Direction basique (on garde simple TD / LR)
             if direction in ('LR', 'RL'):
                 x = base_x + index * spacing_x
                 y = base_y
-            else:  # TD, TB...
+            else:
                 if col >= max_per_row:
                     col = 0
                     row += 1
@@ -368,7 +366,6 @@ class DiagramRenderer(QObject):
                 col += 1
             return (x, y)
 
-        # Créer / mettre à jour
         for idx, spec in enumerate(nodes_spec):
             nid = spec.id
             label = spec.label
@@ -376,7 +373,6 @@ class DiagramRenderer(QObject):
 
             node_item = self.existing_nodes.get(nid)
             if node_item is None:
-                # Position sauvegardée ?
                 saved = pm.get_node_position(nid)
                 if saved:
                     x = saved.get('x', 0)
@@ -387,12 +383,10 @@ class DiagramRenderer(QObject):
                     if auto_layout:
                         x, y = next_auto_pos(idx)
                     else:
-                        # layout: fixed mais pas de position => poser dans grille
                         x, y = next_auto_pos(idx)
                     w = self.node_width
                     h = self.node_height
 
-                # Style de base + classDef
                 style_base = {
                     'fill': self.node_color.name(),
                     'stroke': self.border_color.name()
@@ -413,10 +407,8 @@ class DiagramRenderer(QObject):
                 node_item.setPos(x, y)
                 self.existing_nodes[nid] = node_item
             else:
-                # Mise à jour du label si changé
                 if node_item.label != label:
                     node_item.update_label(label)
-                # Mise à jour style si la classe a changé ou propriétés modifiées
                 if css_class != getattr(node_item, 'css_class', None):
                     node_item.css_class = css_class
                 style_base = {
@@ -427,8 +419,7 @@ class DiagramRenderer(QObject):
                     style_base.update(class_defs[node_item.css_class])
                 node_item.update_style(style_base)
 
-        # --- Gestion des arêtes ---
-        # Index existant
+        # Gestion des arêtes : création, mise à jour, suppression
         edge_map = {}
         for e in self.existing_edges:
             key = (e.source_node.node_id, e.target_node.node_id, getattr(e, 'label', ''), getattr(e, 'edge_type', 'arrow'))
@@ -441,10 +432,7 @@ class DiagramRenderer(QObject):
             key = (es.source, es.target, es.label, es.edge_type)
             needed_keys.add(key)
             if key in edge_map:
-                # Arête déjà présente -> rien sauf label changé (rare)
-                # (Si label changera, la clé change; ici on suppose stable)
                 continue
-            # Créer si les nœuds existent
             src_node = self.existing_nodes.get(es.source)
             tgt_node = self.existing_nodes.get(es.target)
             if not src_node or not tgt_node:
@@ -453,7 +441,6 @@ class DiagramRenderer(QObject):
             edge_item.create_graphics_items(scene)
             new_edge_objects.append(edge_item)
 
-        # Supprimer arêtes obsolètes
         for key, edge_item in list(edge_map.items()):
             if key not in needed_keys:
                 try:
@@ -463,28 +450,25 @@ class DiagramRenderer(QObject):
                 if edge_item in self.existing_edges:
                     self.existing_edges.remove(edge_item)
 
-        # Ajouter les nouvelles arêtes dans la liste globale
         self.existing_edges.extend(new_edge_objects)
 
-        # Optionnel: recalcul final
         for e in new_edge_objects:
             try:
                 e.update_position()
             except Exception:
                 pass
 
-    # ---------- NOUVEAU : normalisation layout ----------
     def normalize_layout(self, scene: QGraphicsScene, direction: str | None = None):
         """
-        Ajuste chaque nœud à son contenu + aligne sur la grille (20px).
+        Ajuste la taille des nœuds à leur contenu et aligne leur position sur une grille.
+        - Met à jour la position et la taille de chaque nœud.
+        - Met à jour la position des arêtes associées.
         """
         grid = 20
         for node in self.existing_nodes.values():
             try:
-                # Ajuster taille au contenu
                 w, h = node.size_to_fit_content()
                 node.set_size(w, h)
-                # Alignement grille
                 p = node.pos()
                 gx = round(p.x() / grid) * grid
                 gy = round(p.y() / grid) * grid
@@ -492,7 +476,6 @@ class DiagramRenderer(QObject):
                     node.setPos(gx, gy)
             except Exception:
                 pass
-        # Mettre à jour arêtes
         for edge in self.existing_edges:
             try:
                 edge.update_position()
